@@ -1,0 +1,129 @@
+NAME: XOR
+
+SUMMARY: The task is to train a network to produce the boolean "exclusive
+or" function of two variables.  This is perhaps the simplest learning
+problem that is not linearly separable.  It therefore cannot be performed
+by a perception-like network with only a single layer of trainable weights.
+In its various forms, XOR has been the most popular learning benchmark in
+recent literature.  XOR is a special case of the parity function, but here
+we will treat it as a separate benchmark in its own right.
+
+SOURCE: Traditional.  The special role of XOR as an impossible problem for
+linear first-order Perceptrons was pointed out by Minsky and Papert.
+
+MAINTAINER: neural-bench@cs.cmu.edu
+
+PROBLEM DESCRIPTION: 
+
+The accompanying data file, "xor.data", is in the standard CMU Neural Network
+Benchmark format.  Note that this problem is simply the two input case of the
+'parity' benchmark.
+
+METHODOLOGY:
+
+There are two popular forms of this problem in the literature of
+back-propagation and related learning architectures.  The first, which we
+will call the "2-2-1 network" has a single layer of two hidden units, each
+connected to both inputs and to the output.  There are 9 trainable weights
+in all, including the 3 bias connections for the hidden and output units.
+This is a special case of the N-bit parity problem with N hidden units.
+
+The second form, which we will call the "2-1-1 shortcut network", has only
+a single hidden unit, but also has "shortcut" connections from the inputs
+to the output unit.  This has 7 trainable weights in all, including the 2
+bias connections.
+
+Under back-propagation, the training is generally run until the network is
+performing "perfectly": for all four input cases, the output must be
+correct.  The accuracy required of binary output values varies widely from
+one study to another.  For uniformity in reporting, we suggest the use of
+the "40-20-40" criterion for boolean outputs and the "restart" method for
+reporting results in which some trials do not converge in reasonable time.
+
+VARIATIONS: 
+
+A few researchers have investigated this problem with more than two hidden
+units; in general, the more hidden units there are, the easier the problem
+becomes.
+
+RESULTS:
+
+On the XOR problem using a 2-2-1 network, the following results have been
+reported:
+
+Fahlman [4] reports an average learning time of 24.22 epochs and a median
+learning time of 19 epochs using quickprop, an atanh error function, and a
+symmetrical sigmoid activation function.  This time was the average of 100
+learning trials with different random starting weights.  Of the 100 trials,
+14 exceeded the limit of 40 epochs and were restarted with new random
+values; the time invested before the restart was included in the time
+reported for those trials.  Epsilon was 4.0 divided by the fan-in to the
+downstream unit; mu was 2.25; initial weights were random in the range -1.0
+to +1.0.
+
+Jacobs [2] reports an average training time of 250.4 epochs with the
+"delta-bar-delta" rule.  Two trials out of 25 failed to converge and were
+thrown out.  For standard backprop Jacobs reports an average training time
+of 538.9, with one trial out of 25 thrown out.
+
+Rumelhart, Hinton, and Williams [1] report work by Yes Chauvin in which the
+average learning time for this network was 245 epochs using standard
+backprop with an eta of 0.25.  More generally, he found that the number of
+epochs required was roughly 280 - 33 log H, where H is the number of hidden
+units and the log is to base 2.
+
+For the 2-1-1 version with shortcut connections:
+
+Watrous [5] reports an average learning time of 3063 epochs over 5 trials
+for standard backprop.  His BFGS method solves the problem in an average of
+17 iterations, each of which is much more expensive that a backprop
+iteration.  By his calculations, each BFGS learning trial averaged 19037
+floating-point operations in all, versus 771968 operations for 3063 epochs
+of backprop.
+
+Fahlman [unpublished] reports that this problem took average time of 9.11
+epochs, averaged over 100 trials (all of which converged).  This results
+was obtained with quickprop, atanh error, symmetric sigmoid activation
+function, Epsilon of 6.0/fan-in, Mu of 2.0, initial weights uniform in the
+range -6.0 to +6.0.
+
+For the 2-4-1 version with no shortcuts:
+
+Tesauro and Janssens [3] studied this as part of their larger study on
+parity.  They report an average time of 95 pattern presentations (23.75
+epochs).  Note, however, that this number is a hypergeometric mean over all
+the trials.  This measure gives more weight to fast trials than to slower
+ones, so the 23 epoch figure is probably near the low side of their
+distribution of results.
+
+Fahlman [unpublished] reports that this problem took a mean time (plain old
+arithmetic mean) of 5.6 epochs, averaged over 100 trials, all of which
+converged.  The worst case took 16 epochs.  That was with quickprop, atanh
+error, symmetric sigmoid activation function, epsilon of 4.0/fan-in, mu of
+2.25, and initial weights uniform over -6 to +6.
+
+REFERENCES:
+
+1. D. E. Rumelhart, G. E. Hinton, and R. J. Williams, "Learning Internal
+Representations by Error Propagation", in Parallel Distributed Processing,
+Vol. 1, D. E. Rumelhart and J. L. McClelland (eds.), MIT Press, 1986.
+
+2. Robert A. Jacobs, "Increased Rates of Convergence Thorugh Learning Rate
+Adaptation", Technical Report COINS TR 87-117, University of Massachusetts
+at Amherst, Dept. of Computer and Information Science, 1987.
+
+3. G. Tesauro and B. Janssens, "Scaling Relationships in Back-Propagation
+Learning", Complex Systems 2, Pages 39-84 1988.
+
+4. Scott E. Fahlman, "Faster-Learning Variations on Back-Propagation: An
+Empirical Study", in Proceedings of the 1988 Connectionist Models Summer
+School, Morgan Kaufmann, 1988.
+
+5. Raymond L. Watrous, "Learning Algorithms for Connectionist Networks:
+Applied Gradient Methods of Nonlinear Optimization", Tech Report
+MIS-CIS-88-62, University of Pa., Dept. of Computer and Info. Science,
+Revised version of July 1988.
+
+COMMENTS:
+
+See also the "parity" benchmark.

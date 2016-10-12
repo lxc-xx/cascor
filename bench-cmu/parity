@@ -1,0 +1,129 @@
+NAME: Parity
+
+SUMMARY: The task is to train a network to produce the sum, mod 2, of N
+binary inputs -- otherwise known as computing the "odd parity" function.
+See also the XOR benchmark, which is the 2-input case of parity.
+
+SOURCE: Traditional.  The special role of Parity as an impossible problem
+for linear first-order Perceptrons was pointed out by Minsky and Papert.
+
+MAINTAINER: neural-bench@cs.cmu.edu
+
+PROBLEM DESCRIPTION: 
+
+The network has N inputs, some number of hidden units, and one output.
+Some pattern of "zero" and "one" values is placed on the inputs.  The
+network must then produce a "one" if there are an odd number of "one" bits
+in the input, and a "zero" if there are an even number.  The "zero" and
+"one" values here are logical values; researchers are free to represent the
+"zero" and "one" values in any way that is appropriate to their learning
+algorithm, for example as real values -1.0 and +1.0.
+
+A program, parity.c, is included with this database.  This program generates
+a data set in the CMU Neural Network Benchmark format.  Instructions for using
+this program are included in the comments at the top of the source code 
+listing.
+
+METHODOLOGY:
+
+With a feed-forward network and no shortcut connections, there must be at
+least N hidden units for a network with N inputs.  Tesauro and Janssens [1]
+use 2N hidden units to reduce the problem of networks getting stuck in a
+local minimum.
+
+Under back-propagation, the training is generally run until the network is
+performing "perfectly": for all 2^N input cases, the output must be
+correct.  For uniformity in reporting, we suggest the use of the "40-20-40"
+criterion for measurement of boolean outputs and the "restart" method for
+reporting results in which some trials do not converge in reasonable time.
+
+VARIATIONS: 
+
+One could use even parity, but this change is uninteresting for most
+learning schemes.
+
+RESULTS:
+
+Tesauro and Janssens [1] studied this problem for a variety of scales using
+back-propagation.  They used an N-2N-1 network, for N ranging from 2 to 8.
+Weights were updated after each pattern presentation, and the training
+times are reported as a number of presentations rather than a number of
+epochs.  Training continued until the output error for each pattern in the
+training set was correct to within 0.1, or until some cutoff time was
+reached, at which time the network was declared to be stuck.  10,000 trials
+were run for N = 2 through 5; for larger N, only "a few hundred" trials
+were run for each N.  For N of 6 or less, a systematic attempt was made to
+locate the settings for learning rate, momentum, and range of initial
+random weights that gave the best results.
+
+Note that the "average" training times reported here are computed using the
+hypergeometric mean.  (See the GLOSSARY file for details.)  This measure
+avoids problems due to infinite or very long trials, because their
+contribution to the average is minimal.  On the other hand, it
+over-emphasizes fast trials and favors learning techniques that do very
+well on some trials and very poorly on others over techniques with the same
+average speed but that are more consistent in learnign speed.
+
+The results of this study are summarized as follows:
+
+N  Average	Average   Eps   Alpha
+   Prestns.	Epochs
+-------------------------------------------------------------
+2       95	  24	   30	.94	     
+3      265	  33	   20	.96
+4     1200	  75       12	.97
+5     4100	 128        7	.98
+6   20,000	 312        3	.985
+7  100,000	 781        2	.99
+8  500,000	1953      1.5	.99
+
+The range of random initial values, r, was always around 2.5 except for
+N=8, in which case it was 2.0.
+
+For the small N problems in which the parameters could be carefully
+optimized, the total training time measured in presentations grows roughly
+as 4^N, and the time measured in epochs grows roughly as 2^N.
+
+Fahlman [unpublished] reports the following results on this same N-2N-1
+parity problem using quickprop, hyperbolic arctangent error, and a
+symmetric sigmoid activation function.  The asterisk by each epsilon value
+in the table indicates that this value is divided by the fan-in to the unit
+on the output side of the connection.  For each N, the reported result is
+the average of 100 trials, except that only 25 trials were run for N=8.
+In every case, the weights were initialized to random values in teh range
+-6.0 to +6.0.
+
+A brief search was done to find good parameter values for each value of N
+from 2 through 7.  However, the restart reporting method introduces
+considerable noise into this search.  Less tuning could be done for the
+case of N=8.
+
+Since some trials for larger values of N did not converge, the restart
+reporting method is used (see the GLOSSARY file).  The times reported for
+restarted trials include the time spent before the restart.  A normal
+arithmetic mean is used in computing the average number of epochs.
+
+
+N  Average  Standard     Restarts	Mu	Epsilon
+   Epochs   Deviation					  
+---------------------------------------------------------
+2    5.65      2.73	   0	       2.25      4.00*   
+3    7.43      3.20        0           2.50      4.00*   
+4   15.26      7.90	2/100 @ 40     2.00	 4.00*   
+5   22.16     11.51     7/100 @ 40     2.25      3.50*   
+6   55.96     30.08    15/100 @ 80     2.25      2.75*   
+7   72.84     41.11     6/100 @ 140    2.25      0.50*   
+8  172.24     90.98      2/25 @ 250    2.25      0.25*   
+
+While quickprop requires fewer epochs for each N than the standard backprop
+algorithm used by Tesauro and Janssens, we see that even with quickprop the
+number of epochs seems to double, more or less, for each increment in N.
+
+REFERENCES: 
+
+1. G. Tesauro and B. Janssens, "Scaling Relationships in Back-Propagation
+Learning", Complex Systems 2, Pages 39-84 1988.
+
+COMMENTS:
+
+See also the "xor" benchmark.

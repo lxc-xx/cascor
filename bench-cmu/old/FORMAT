@@ -1,0 +1,154 @@
+This file describes the recommended format for submissions to the CMU-based
+collection of learning benchmarks for neural networks.
+
+Each benchmark problem will be described by a separate ASCII text file in
+the directory "/afs/cs.cmu.edu/project/connect/bench".  These will be
+called the "benchmark description" files.  There may additionally be one or
+more "data" files as described below.  (If we find that a lot of the
+benchmarks require multiple files, we may move to a scheme in which each
+benchmark is in its own unix subdirectory, but that makes it much harder
+for some researchers to grab the files via FTP; for now, we'll try to stick
+with a single-level directory.)  Administrative files, such as this one,
+will have names in ALL-CAPITALS so that they will stand out in directory
+listings, at least for users with case-sensitive file systems.
+
+The benchmark files and data sets should not be copyrighted.  In rare cases
+we might accept a copyrighted data set if the owner gives blanket
+permission for free distribution and non-commercial use, but we would
+prefer to keep that to a minimum.  Once a benchmark has been installed, we
+will assign someone at CMU as "maintainer".  This person will add new
+results to the benchmark description file and perform any other
+housekeeping that is required.  Obviously, we would try to avoid changing
+the problem itself once people have started to work on it; it is better to
+release any substantive revision as a distinct benchmark.
+
+As a courtesy to people who must read this stuff on old-fashioned terminals
+and text editors, lines of text in the benchmark description files should
+be no longer than 79 characters unless there is a compelling reason to
+include a longer line.
+
+The proposed format for a benchmark description file follows the dashed
+line.  Text within <<double pointy brackets>> is descriptive; everything
+else is meant to be verbatim.
+
+One last comment: There will occasionally be judgment calls about what goes
+into the collection (or into one of these files) and what does not.  In
+general, we will try to resolve these issues by discussion and
+consensus-building on the nn-bench mailing list.  However, if consensus
+cannot be reached and a decision has to be made, the final decision will
+rest with the maintainers of this collection.
+
+---------------------------------------------------------------------------
+NAME: <<Descriptive name for the problem, e.g. "encoder".>>
+
+SUMMARY: 
+<<A description, in just a couple of sentences, telling what the benchmark
+is about.  This should be suitable for inclusion in a catalog file.>>
+
+SOURCE: <<Who created the problem or assembled the data set?>>
+
+MAINTAINER: <<A person, probably at CMU, who keep this file up to date.>>
+
+PROBLEM DESCRIPTION:
+
+<<A detailed description of the learning problem itself, in sufficient
+detail so that experimental results will be identical, other things being
+equal.  The format of this description will vary somewhat, depending on the
+type of problem.  The actual input/output mappings may be described in four
+ways:
+
+1. As a program fragment in some widely understood language such as C or
+Common Lisp.
+
+2. If there are only a few patterns, as an explicit list included in this
+file.  An example some readers might recognize:
+
+	00	=>	0
+	01	=>	1
+	10	=>	1
+	11	=>	0
+
+3. As a separate data file whose format is clearly specified here.  If
+the benchmark description file is named "foo", the associated data file
+would be "foo.data".
+
+4. At present, we have rather limited storage space for this project at
+CMU.  For very large benchmark problems, we may keep a benchmark
+description file here, but not the data itself.  In such cases, this
+section would describe how to obtain the data set via FTP, tape, or
+whatever.>>
+
+METHODOLOGY: <<This section should suggest a way of running the problem.
+For example, it might say something like "Run the training set until 95% of
+the examples are within 5% of the desired output, then run the testing set.
+Report total training time in terms of total presentations of I/O pairs
+and also the fraction of testing-set examples that are correct to within
+10%."
+
+The idea here is to provide some guidelines so that when different
+researchers run the problem with similar algorithms, the truly arbitrary
+choices about how to run the problem are made in the same way by everyone.
+That is, we want to minimize the number of cases in which the training
+times cannot be compared because one person trains to 95% correctness, one
+to 99%, and one to 85%, with no particular reason for the differences.  On
+the other hand, we must allow for cases in which a researcher will report
+results that do not follow these guidelines for some good reason: perhaps
+his learning method does not deal in I/O presentations, or perhaps his
+method never gets 95% of the cases right but learns 80% of them very
+quickly.
+
+This will probably be an area where some discussion and negotiation is
+required when each new benchmark is submitted, in order to make these
+guidelines as broad as possible, but useful to those working with a single
+paradigm such as back-propagation and its relatives.  We will attempt to
+create some separate files that describe "standard" methodologies,
+applicable to a broad range of problems such as binary-to-binary mappings
+where the set of mappings to be learned is small.  These can simply be
+included by reference where they are appropriate.>>
+
+VARIATIONS: <<Some problems will have several simple variations that also
+make interesting benchmarks.  These may be variations in the data to be
+learned or in the methodology to be employed.  In some cases, variations
+will be split off into separate benchmark files, but in other cases it
+might make more sense to bundle them with the original problem.  Each
+variation should be given a name or some other clear, concise way of
+designating which variation is being run (e.g. "10-5-10 complement
+encoder").
+
+RESULTS: <<This section will contain a summary of results reported by
+various researchers on this problem, with name and date of the report or
+pointer to a published reference.  Results that have been completely
+subsumed by more recent work may be dropped, but in general we will report
+results obtained by various methods, and not just the current "record"
+holder.
+
+We want to keep this summary brief, but the entries (or the published
+report) must contain enough detailed information to allow another
+researcher to attempt to duplicate the experiment.  The algorithm used
+should have been described in detail in some published account, with
+parameters and variations described here.  Alternatively, researchers may
+make their code available for public inspection and use.  (We may try to
+collect such programs here if disk space allows.)
+
+In order to keep these reports small and coherent, we will attempt to build
+up a file of definitions that pertain to the various methods, so that when
+two researchers report that they have run a problem with backprop using a
+certain "alpha" parameter, they are talking about the same definition of
+"alpha".  Some arbitrary choices will have to be made in those cases where
+several different definitions are already in common use.>>
+
+REFERENCES: <<Pointers to published works (including tech reports) that
+relate in some way to this benchmark.  We'll assign arbitrary numbers to
+these so that descriptions in the results section can refer to these works.
+Since this section will accrue over time as we learn of new references, we
+probably will not try to sort these references into alphabetical or
+strict chronological order, unless some reference section grows to such
+great size that we must do this in order to preserve our sanity.>>
+
+COMMENTS: <<Some benchmarks may generate a lot of discussion on the mailing
+list, and we may want a catch-all section where comments by various
+researchers can be kept.  For example: "Though it appears to be a speech
+benchmark, this test actually tells us nothing about real speech.  -- F. U.
+Bar, University of North Wombattia".  This could easily get out of hand, of
+course.>>
+

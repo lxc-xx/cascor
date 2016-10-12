@@ -1,0 +1,23 @@
+;XOR Benchmark Data Set
+
+;Maintainer: neural-bench@cs.cmu.edu
+
+$SETUP
+
+PROTOCOL:  IO;
+OFFSET:     0;
+INPUTS:     2;
+OUTPUTS:    1;
+
+IN [1]: BINARY;
+IN [2]: BINARY;
+
+OUT [1]: BINARY;
+
+
+$TRAIN
+
+-, -   =>  -;
+-, +   =>  +;
++, -   =>  +;
++, +   =>  -;

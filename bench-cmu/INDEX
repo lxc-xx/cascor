@@ -1,0 +1,93 @@
+*********************************************************
+	CMU Neural Network Benchmark Database
+
+Last Updated: February 28, 1993
+FTP: ftp.cs.cmu.edu -  /afs/cs/project/connect/bench
+AFS: /afs/cs.cmu.edu/project/connect/bench
+Site contact:  neural-bench@cs.cmu.edu
+*********************************************************
+
+NetTalk Corpus
+--------------
+SOURCE:  Terry Sejnowski & Charles Rosenberg
+RESULTS: 2
+SUMMARY: This is an updated and corrected version of the data set used by
+Sejnowski and Rosenberg in their influential study of speech generation
+using a neural network.  The file "nettalk.data" contains a list of
+20,008 English words, along with a phonetic transcription for each word.
+The task is to train a network to produce the proper phonemes, given a
+string of letters as input.  This is an example of an input/output mapping
+task that exhibits strong global regularities, but also a large number of
+more specialized rules and exceptional cases.
+
+
+Parity
+------
+SOURCE:  Traditional
+RESULTS: 2
+SUMMARY: The task is to train a network to produce the sum, mod 2, of N
+binary inputs -- otherwise known as computing the "odd parity" function.
+See also the XOR benchmark, which is the 2-input case of parity.
+
+
+Protein
+-------
+SOURCE:  Terry Sejnowski & Ning Qian
+RESULTS: 1
+SUMMARY: This is a data set used by Ning Qian and Terry Sejnowski in their
+study using a neural net to predict the secondary structure of certain
+globular proteins.  The idea is to take a linear sequence of amino
+acids and to predict, for each of these amino acids, what secondary
+structure it is a part of within the protein.  There are three choices:
+alpha-helix, beta-sheet, and random-coil.  The data set contains both a
+large set of training data and a distinct set of data that can be used for
+testing the resulting network.  Qian and Sejnowski use a Nettalk-like
+approach and report an accuracy of 64.3% on the test set, and they
+speculate that this is about the best that can be done using only local
+context.
+
+
+Sonar, Mines vs. Rocks
+----------------------
+SOURCE:  Terry Sejnowski & R. Paul Gorman
+RESULTS: 1 (1 variant)
+SUMMARY: This is the data set used by Gorman and Sejnowski in their study
+of the classification of sonar signals using a neural network.  The
+task is to train a network to discriminate between sonar signals bounced
+off a metal cylinder and those bounced off a roughly cylindrical rock.
+
+
+Two Spirals
+-----------
+SOURCE:  Alexis Wieland of MITRE Corporation
+RESULTS: 6 (2 variants)
+SUMMARY: The task is to learn to discriminate between two sets of training
+points which lie on two distinct spirals in the x-y plane.  These spirals
+coil three times around the origin and around one another.  This appears to
+be a very difficult task for back-propagation networks and their relatives.
+Problems like this one, whose inputs are points on the 2-D plane, are
+interesting because we can display the 2-D "receptive field" of any unit in
+the network.
+
+
+Vowel Recognition
+-----------------
+SOURCE:  David Deterding, Mahesan Niranjan & Tony Robinson
+RESULTS: 16
+SUMMARY: Speaker independent recognition of the eleven steady state vowels
+of British English using a specified training set of lpc derived log area
+ratios.
+
+
+XOR
+---
+SOURCE:  Traditional
+RESULTS: 4 (4 variants)
+SUMMARY: The task is to train a network to produce the boolean "exclusive
+or" function of two variables.  This is perhaps the simplest learning
+problem that is not linearly separable.  It therefore cannot be performed
+by a perception-like network with only a single layer of trainable weights.
+In its various forms, XOR has been the most popular learning benchmark in
+recent literature.  XOR is a special case of the parity function, but here
+we will treat it as a separate benchmark in its own right.
+
