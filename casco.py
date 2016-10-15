@@ -13,7 +13,6 @@ from keras.layers.core import Dense, Dropout, Activation
 from keras.optimizers import SGD, Adam, RMSprop
 from keras.utils import np_utils
 from keras.layers import Input, merge
-#from keras.utils.visualize_util import plot
 import dataset
 
 #from multiprocessing import Process, Value, Array, Manager
@@ -139,9 +138,6 @@ class CascadeCorrelation(object):
         else:
             return None
 
-#    def visualize(self, img_path):
-#        if self.model: 
-#            plot(self.model, to_file=img_path)
 
 
 if __name__ == "__main__":
