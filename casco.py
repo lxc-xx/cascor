@@ -25,6 +25,8 @@ def neg_abs_cov(y_true, y_pred):
 def neg_abs_cor(y_true, y_pred): 
     return -T.sum(T.abs(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0)/T.sqrt(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_true-T.mean(y_true,0,keepdims=True)),axis=0))/T.sqrt(T.sum((y_pred - T.mean(y_pred,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0))))
 
+def select_candidate( x, y, batch_size=128, nb_epoch=200, hidden_loss = 'cov', nb_candidates = 5, nb_positions = 1, criteria = 'best'): 
+    assert(nb_positions<=nb_candidates)
     cand_input = Input(shape=(x.shape[1],))
 
     cand_outputs = []
@@ -49,6 +51,7 @@ def neg_abs_cor(y_true, y_pred):
     opt = RMSprop()
 
     model.compile(loss=loss_func, optimizer=opt)
+    fit_record = model.fit(x, [y]*nb_candidates,validation_data=(x, [y]*nb_candidates), batch_size=batch_size, nb_epoch=nb_epoch, verbose=1 ,callbacks = [callbacks.EarlyStopping(monitor='val_loss', patience=2, verbose=1, mode='min')])
     losses = model.evaluate(x,[y]*nb_candidates, verbose=0)
 
     layer_loss = sorted(zip(cand_layers, losses[1:]), key = lambda x: x[1])
