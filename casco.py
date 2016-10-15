@@ -15,6 +15,8 @@ from keras.utils import np_utils
 from keras.layers import Input, merge
 import dataset
 
+from sklearn.cross_validation import train_test_split
+
 #from multiprocessing import Process, Value, Array, Manager
 #from multiprocessing import Process, Lock
 #from multiprocessing.sharedctypes import Value, Array
@@ -74,12 +76,14 @@ class CascadeCorrelation(object):
         self.input_node = None
         self.output_node = None
 
-    def fit(self, X_train, Y_train, validation_data = None, outter_epoch = 20,  hidden_epoch = 20, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov'):
+    def fit(self, X_train, Y_train, validation_data = None, outter_epoch = 20,  hidden_epoch = 20, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov', hidden_train_ratio = 0.4):
 
         if not validation_data:
             validation_data = (X_train, Y_train)
 
         X_test, Y_test = validation_data
+
+        X_train, X_val, Y_train, Y_val = train_test_split(X_train, Y_train, test_size=hidden_train_ratio,random_state=43)
 
         self.history = {}
         self.hidden_weights = []
@@ -87,6 +91,7 @@ class CascadeCorrelation(object):
         output_dim = Y_train.shape[1] 
         hidden_feat = np.copy(X_train)
         hidden_feat_test = np.copy(X_test)
+        hidden_feat_val = np.copy(X_val)
         
         warm_start = None
         self.input_node = Input(shape=(input_dim,),name='Input_Feature')
@@ -120,11 +125,11 @@ class CascadeCorrelation(object):
                 break
 
             #Get residual
-            pred = model.predict(hidden_feat) 
-            residual = Y_train - pred 
+            pred = model.predict(hidden_feat_val) 
+            residual = Y_val - pred 
 
             #Select candidate
-            candidate = select_candidate(hidden_feat, residual, nb_epoch=hidden_epoch, nb_candidates=nb_candidates, hidden_loss=hidden_loss, nb_positions=self.positions_per_layer)
+            candidate = select_candidate(hidden_feat_val, residual, nb_epoch=hidden_epoch, nb_candidates=nb_candidates, hidden_loss=hidden_loss, nb_positions=self.positions_per_layer)
 
             #Cache hidden featuure
             cache_in_node = Input(shape=(hidden_feat.shape[1],))
@@ -137,6 +142,9 @@ class CascadeCorrelation(object):
 
             hidden_pred_test = hidden_model.predict(hidden_feat_test)
             hidden_feat_test = np.hstack((hidden_feat_test, hidden_pred_test))
+
+            hidden_pred_val = hidden_model.predict(hidden_feat_val)
+            hidden_feat_val = np.hstack((hidden_feat_val, hidden_pred_val))
 
             #Candidate tenure
             hidden_layer = Dense(self.positions_per_layer, activation='tanh')
@@ -164,25 +172,25 @@ if __name__ == "__main__":
     
     from keras.datasets import cifar10
     from keras.datasets import mnist
-    #(X_train, y_train), (X_test, y_test) = mnist.load_data()
-    (X_train, y_train), (X_test, y_test) = cifar10.load_data()
-    X_train, X_test = map(lambda x:x.repeat(2, axis=1).repeat(2, axis=2), [X_train, X_test])
+    (X_train, y_train), (X_test, y_test) = mnist.load_data()
+    #(X_train, y_train), (X_test, y_test) = cifar10.load_data()
+    #X_train, X_test = map(lambda x:x.repeat(2, axis=1).repeat(2, axis=2), [X_train, X_test])
     X_train = X_train.astype('float32')
     X_test = X_test.astype('float32')
     X_train /= 255
     X_test /= 255
     nb_classes=10
 
-    #X_train=X_train.reshape(X_train.shape[0],-1)
-    #X_test=X_test.reshape(X_test.shape[0],-1)
+    X_train=X_train.reshape(X_train.shape[0],-1)
+    X_test=X_test.reshape(X_test.shape[0],-1)
     Y_train = np_utils.to_categorical(y_train, nb_classes)
     Y_test = np_utils.to_categorical(y_test, nb_classes)
 
-    from keras.models import load_model
-    model = load_model('./revisit/vgg_2.h5')
-    feat_mapper = Model(input=model.layers[0].input, output=model.get_layer('flatten_2').output)
-    X_test = feat_mapper.predict(X_test)
-    X_train = feat_mapper.predict(X_train)
+    #from keras.models import load_model
+    #model = load_model('./revisit/vgg_2.h5')
+    #feat_mapper = Model(input=model.layers[0].input, output=model.get_layer('flatten_2').output)
+    #X_test = feat_mapper.predict(X_test)
+    #X_train = feat_mapper.predict(X_train)
     
     casco = CascadeCorrelation(nb_hidden_layers = 100, positions_per_layer = 10)
     casco.fit(X_train,Y_train, validation_data=(X_test,Y_test), show_history=True, nb_candidates=20)
