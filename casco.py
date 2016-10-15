@@ -4,30 +4,43 @@ from sklearn.metrics import accuracy_score
 from time import gmtime, strftime
 import cPickle as pkl
 import pprint
-import theano
-import theano.tensor as T
+
 import keras
-from keras.models import Sequential
+from keras import backend as T
+from keras import callbacks
+from keras.models import Sequential, Model
 from keras.layers.core import Dense, Dropout, Activation
 from keras.optimizers import SGD, Adam, RMSprop
 from keras.utils import np_utils
-import threading 
+from keras.layers import Input, merge
+from keras.utils.visualize_util import plot
+
+import dataset
 
 #from multiprocessing import Process, Value, Array, Manager
 #from multiprocessing import Process, Lock
 #from multiprocessing.sharedctypes import Value, Array
 
 def neg_abs_cov(y_true, y_pred): 
-    return -T.sum(T.abs_(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0)))
+    return -T.sum(T.abs(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0)))
 
 def neg_abs_cor(y_true, y_pred): 
-    return -T.sum(T.abs_(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0)/T.sqrt(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_true-T.mean(y_true,0,keepdims=True)),axis=0))/T.sqrt(T.sum((y_pred - T.mean(y_pred,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0))))
+    return -T.sum(T.abs(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0)/T.sqrt(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_true-T.mean(y_true,0,keepdims=True)),axis=0))/T.sqrt(T.sum((y_pred - T.mean(y_pred,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0))))
 
-def hidden_candidate( x, y, rec, input_dim, output_dim, idx, batch_size=128, nb_epoch=2000, hidden_loss = 'cov'): 
-    model=Sequential()
-    model.add(Dense(output_dim, input_shape=(input_dim,)))
+def select_candidate( x, y, batch_size=128, nb_epoch=200, hidden_loss = 'cov', nb_candidates = 5): 
+    cand_input = Input(shape=(x.shape[1],))
 
-    model.add(Activation('tanh'))
+    cand_outputs = []
+    cand_layers = []
+
+    for out_idx in range(nb_candidates):
+        layer = Dense(1, activation='tanh')
+        out = layer(cand_input)
+        cand_outputs.append(out)
+        cand_layers.append(layer)
+
+    model = Model(input=cand_input, output=cand_outputs)
+
 
     if hidden_loss is 'cov': 
         loss_func = neg_abs_cov
@@ -39,115 +52,105 @@ def hidden_candidate( x, y, rec, input_dim, output_dim, idx, batch_size=128, nb_
     opt = RMSprop()
 
     model.compile(loss=loss_func, optimizer=opt)
-    fit_record = model.fit(x, y, batch_size=batch_size, nb_epoch=nb_epoch, verbose=0)
-    loss = model.evaluate(x,y, verbose=0)
-    rec[idx] = {'model':model, 'loss':loss}
+    fit_record = model.fit(x, [y]*nb_candidates, batch_size=batch_size, nb_epoch=nb_epoch, verbose=1)
+    losses = model.evaluate(x,[y]*nb_candidates, verbose=0)
+
+    layer, loss = min(zip(cand_layers, losses[1:]), key = lambda x: x[1])
+    return {'weights':layer.get_weights(),'model':model, 'layer_loss':zip(cand_layers, losses[1:])}
+    #rec[idx] = {'model':model, 'loss':loss}
 
 class CascadeCorrelation(object):
     def __init__(self, hidden_num = 10):
         self.hidden_num = hidden_num
-        self.hidden_models = []
-        self.top_model = None
-        self.hist_rec = []
+        self.model = None
+        self.history = {}
+        self.hidden_weights = []
+        self.input_node = None
+        self.output_node = None
 
-
-    def fit(self, X_train, Y_train, outter_epoch = 2000,  hidden_epoch = 2000, batch_size = 128, pool_size = 4, verbose=0, show_history=False, top_loss = 'mse', hidden_loss = 'cov'):
-
-        self.hidden_models = []
-        self.hidden_cors = []
-        warm_start = None
+    def fit(self, X_train, Y_train, outter_epoch = 200,  hidden_epoch = 200, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov'):
+        self.history = {}
+        self.hidden_weights = []
+        input_dim = X_train.shape[1]
+        output_dim = Y_train.shape[1] 
         hidden_feat = np.copy(X_train)
-        self.hist_rec = []
+        
+        warm_start = None
+        self.input_node = Input(shape=(input_dim,),name='Input_Feature')
+        feat_node = self.input_node
+        self.output_node = None
+
         while True:
-            model = Sequential()
-            input_dim = hidden_feat.shape[1]
-            output_dim = Y_train.shape[1] 
-            model.add(Dense(output_dim, input_shape=(input_dim,))) 
+            in_node = Input(shape=(hidden_feat.shape[1],))
+            pred_layer = Dense(output_dim, activation='softmax')
+            pred_node = pred_layer(in_node)
 
-            if warm_start:
-                warm_start[0] = np.vstack((warm_start[0], np.random.uniform(-1,1,size=(output_dim,output_dim))))
-                model.set_weights(warm_start)
+            if warm_start: 
+                warm_start[0] = np.vstack((warm_start[0], np.random.uniform(-1,1,size=(1,output_dim)))) 
+                pred_layer.set_weights(warm_start)
 
-            model.add(Activation('tanh')) 
-            #model.add(Dropout(0.5))
-            opt = RMSprop() 
-            model.compile(loss=top_loss, optimizer=opt) 
-            fit_record = model.fit(hidden_feat, Y_train, batch_size=batch_size, nb_epoch=outter_epoch, verbose=verbose, validation_data=(hidden_feat, Y_train)) 
-            pred = model.predict(hidden_feat) 
-            residual = Y_train - pred 
-            accuracy = accuracy_score([1 if x > 0 else 0 for x in Y_train], [1 if x>0 else 0 for x in pred])
-            loss = model.evaluate(hidden_feat, Y_train, verbose=0)
-            warm_start = model.get_weights() 
+            model = Model(input=in_node, output=pred_node)
+            model.compile(optimizer='rmsprop', loss=top_loss, metrics=['accuracy'])
+            fit_history = model.fit(hidden_feat, Y_train, batch_size=batch_size, nb_epoch=outter_epoch, verbose=verbose, validation_data=(hidden_feat, Y_train), callbacks = [callbacks.EarlyStopping(monitor='val_loss', patience=2, verbose=1, mode='auto')])
 
-            self.top_model = model
-            if len(self.hidden_models) >= self.hidden_num:
+            #save the warm start weights
+            warm_start = pred_layer.get_weights()
+
+            #Build the output node
+            output_layer = Dense(output_dim = output_dim, input_dim = input_dim, activation='softmax')
+            self.output_node = output_layer(feat_node)
+            output_layer.set_weights(pred_layer.get_weights())
+            output_layer.name = "Output_Prediction"
+
+            if len(self.hidden_weights) >= self.hidden_num:
+                self.model=Model(input = self.input_node, output=self.output_node)
                 break
 
-            threads = [] 
-            pool= dict() 
-            #print "Looking for good hidden candidate" 
-            for i in range(pool_size): 
-                t = threading.Thread(target=hidden_candidate, args=(hidden_feat, residual, pool, input_dim, output_dim, i, batch_size, hidden_epoch, hidden_loss)) 
-                threads.append(t) 
-                t.start()
+            #Get residual
+            pred = model.predict(hidden_feat) 
+            residual = Y_train - pred 
 
-            for t in threads: 
-                t.join()
+            #Select candidate
+            candidate = select_candidate(hidden_feat, residual, nb_epoch=hidden_epoch, nb_candidates=nb_candidates, hidden_loss=hidden_loss)
 
-            chosen = min(pool.values(), key = lambda x: x['loss']) 
+            #Cache hidden featuure
+            cache_in_node = Input(shape=(hidden_feat.shape[1],))
+            cache_hidden_layer = Dense(1, activation='tanh')
+            cache_hidden_node = cache_hidden_layer(cache_in_node)
+            hidden_model = Model(input=cache_in_node, output=cache_hidden_node)
+            hidden_pred = hidden_model.predict(hidden_feat)
+            hidden_feat = np.hstack((hidden_feat, hidden_pred))
 
-            #pprint.pprint(chosen)
+            #Candidate tenure
+            hidden_layer = Dense(1, activation='tanh')
+            hidden_node = hidden_layer(feat_node)
+            hidden_layer.set_weights(candidate['weights'])
+            self.hidden_weights.append(candidate['weights'])
+            hidden_layer.trainable = False
+            hidden_layer.name = "Hidden_" + str(len(self.hidden_weights))
 
-            self.hist_rec.append({'loss':loss,'accuracy':accuracy, 'hidden_loss': chosen['loss']})
-            #pprint.pprint(self.hist_rec)
-
-            #print "hidden idx: " + str(len(self.hist_rec))
-
-            if show_history:
-                idx = len(self.hist_rec)
-                rec = self.hist_rec[-1] 
-                print "hidden_idx: " + str(idx) + ", accuracy: " + str(rec['accuracy']) + ", loss: " + str(rec['loss']) + ", hidden_loss: " + str(rec['hidden_loss'])
-
-
-            hidden_model=chosen['model'] 
-            hidden_pred = hidden_model.predict(hidden_feat) 
-            hidden_feat = np.hstack((hidden_feat, hidden_pred)) 
-            self.hidden_models.append(hidden_model)
-
-        return
+            #update the feat node
+            feat_node = merge([feat_node, hidden_node], mode='concat')
+            #print feat_node
 
     def pred(self, feat):
 
-        if self.top_model: 
-            hidden_feat = self.map(feat) 
-            return self.top_model.predict(hidden_feat)
+        if self.model: 
+            return self.model.predict(feat)
         else:
             return None
 
-
-    def map(self, feat):
-
-        hidden_feat = np.copy(feat)
-
-        for hidden_model in self.hidden_models:
-            hidden_pred = hidden_model.predict(hidden_feat) 
-            hidden_feat = np.hstack((hidden_feat, hidden_pred)) 
-        
-        return hidden_feat
-
-from . import dataset
-def main():
-
-    X_train,Y_train = dataset.load_two_spirals()
-
-    casco = CascadeCorrelation(2)
-    casco.fit(X_train,Y_train, show_history=True)
-    
-    time_stamp = strftime("%Y-%m-%d_%H:%M:%S", gmtime())
-    pkl.dump(casco, open('./casco_cov_mse_'+time_stamp+'.pkl','wb') )
-
-    return
+    def visualize(self, img_path):
+        if self.model: 
+            plot(self.model, to_file=img_path)
 
 
-if __name__ == "__main__":
-    main()
+
+X_train,Y_train = dataset.load_two_spirals()
+Y_train = np_utils.to_categorical(Y_train, 2)
+
+hidden_feat = np.copy(X_train)
+
+casco = CascadeCorrelation(2)
+casco.fit(X_train,Y_train, show_history=True)
+
