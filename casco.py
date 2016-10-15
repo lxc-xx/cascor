@@ -152,8 +152,8 @@ if __name__ == "__main__":
     X_train /= 255
     X_test /= 255
     nb_classes=10
-    #X_train=X_train.reshape(X_train.shape[0],-1)
-    #X_test=X_test.reshape(X_test.shape[0],-1)
+    X_train=X_train.reshape(X_train.shape[0],-1)
+    X_test=X_test.reshape(X_test.shape[0],-1)
     Y_train = np_utils.to_categorical(y_train, nb_classes)
     Y_test = np_utils.to_categorical(y_test, nb_classes)
     
