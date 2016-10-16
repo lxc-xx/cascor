@@ -67,7 +67,7 @@ def select_candidate( x, y, batch_size=128, nb_epoch=200, hidden_loss = 'cov', n
     #rec[idx] = {'model':model, 'loss':loss}
 
 class CascadeCorrelation(object):
-    def __init__(self, nb_hidden_layers = 10, positions_per_layer = 1):
+    def __init__(self, nb_hidden_layers = 10, positions_per_layer = 1, base_model=None):
         self.nb_hidden_layers = nb_hidden_layers
         self.positions_per_layer=positions_per_layer
         self.model = None
@@ -75,8 +75,9 @@ class CascadeCorrelation(object):
         self.hidden_weights = []
         self.input_node = None
         self.output_node = None
+        self.base_model = base_model
 
-    def fit(self, X_train, Y_train, validation_data = None, outter_epoch = 20,  hidden_epoch = 20, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov', hidden_train_ratio = 0.4):
+    def fit(self, X_train, Y_train, validation_data = None, outter_epoch = 20,  hidden_epoch = 20, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov', hidden_train_ratio = 0.4, train_base = False, tenure = True):
 
         if not validation_data:
             validation_data = (X_train, Y_train)
@@ -89,12 +90,18 @@ class CascadeCorrelation(object):
         self.hidden_weights = []
         input_dim = X_train.shape[1]
         output_dim = Y_train.shape[1] 
+
         hidden_feat = np.copy(X_train)
         hidden_feat_test = np.copy(X_test)
         hidden_feat_val = np.copy(X_val)
         
         warm_start = None
         self.input_node = Input(shape=(input_dim,),name='Input_Feature')
+        #if self.base_model:
+        #    self.base_model.trainable = train_base
+        #    self.input_node = self.batch_size(self.input_node)
+
+
         feat_node = self.input_node
         self.output_node = None
 
@@ -172,25 +179,25 @@ if __name__ == "__main__":
     
     from keras.datasets import cifar10
     from keras.datasets import mnist
-    (X_train, y_train), (X_test, y_test) = mnist.load_data()
-    #(X_train, y_train), (X_test, y_test) = cifar10.load_data()
-    #X_train, X_test = map(lambda x:x.repeat(2, axis=1).repeat(2, axis=2), [X_train, X_test])
+    #(X_train, y_train), (X_test, y_test) = mnist.load_data()
+    (X_train, y_train), (X_test, y_test) = cifar10.load_data()
+    X_train, X_test = map(lambda x:x.repeat(2, axis=1).repeat(2, axis=2), [X_train, X_test])
     X_train = X_train.astype('float32')
     X_test = X_test.astype('float32')
     X_train /= 255
     X_test /= 255
     nb_classes=10
 
-    X_train=X_train.reshape(X_train.shape[0],-1)
-    X_test=X_test.reshape(X_test.shape[0],-1)
+    #X_train=X_train.reshape(X_train.shape[1],-1)
+    #X_test=X_test.reshape(X_test.shape[0],-1)
     Y_train = np_utils.to_categorical(y_train, nb_classes)
     Y_test = np_utils.to_categorical(y_test, nb_classes)
 
-    #from keras.models import load_model
-    #model = load_model('./revisit/vgg_2.h5')
-    #feat_mapper = Model(input=model.layers[0].input, output=model.get_layer('flatten_2').output)
-    #X_test = feat_mapper.predict(X_test)
-    #X_train = feat_mapper.predict(X_train)
+    from keras.models import load_model
+    model = load_model('./revisit/vgg_1.h5')
+    feat_mapper = Model(input=model.layers[0].input, output=model.get_layer('flatten_1').output)
+    X_test = feat_mapper.predict(X_test)
+    X_train = feat_mapper.predict(X_train)
     
     casco = CascadeCorrelation(nb_hidden_layers = 100, positions_per_layer = 10)
     casco.fit(X_train,Y_train, validation_data=(X_test,Y_test), show_history=True, nb_candidates=20)
