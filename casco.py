@@ -77,78 +77,91 @@ class CascadeCorrelation(object):
         self.output_node = None
         self.base_model = base_model
 
-    def fit(self, X_train, Y_train, validation_data = None, outter_epoch = 20,  hidden_epoch = 20, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov', hidden_train_ratio = 0.4, train_base = False, tenure = True):
+    def fit(self, X_train, Y_train, validation_data = None, outter_epoch = 20,  hidden_epoch = 20, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov', hidden_train_ratio = -1, tenure = True, dropout_rate = -1):
 
         if not validation_data:
             validation_data = (X_train, Y_train)
 
-        X_test, Y_test = validation_data
-
-        X_train, X_val, Y_train, Y_val = train_test_split(X_train, Y_train, test_size=hidden_train_ratio,random_state=43)
-
         self.history = {}
         self.hidden_weights = []
-        input_dim = X_train.shape[1]
+        input_shape = X_train.shape[1:]
         output_dim = Y_train.shape[1] 
 
-        hidden_feat = np.copy(X_train)
-        hidden_feat_test = np.copy(X_test)
-        hidden_feat_val = np.copy(X_val)
+        X_test, Y_test = validation_data
+
+        if hidden_train_ratio > 0:
+            X_train, X_val, Y_train, Y_val = train_test_split(X_train, Y_train, test_size=hidden_train_ratio,random_state=43)
+            hidden_feat_val = X_val
+        else:
+            X_val = X_train
+            Y_val = Y_train
+            hidden_feat_val = X_train
+
+        #hidden_feat = np.copy(X_train)
+        #hidden_feat_test = np.copy(X_test)
+        #hidden_feat_val = np.copy(X_val)
         
         warm_start = None
-        self.input_node = Input(shape=(input_dim,),name='Input_Feature')
-        #if self.base_model:
-        #    self.base_model.trainable = train_base
-        #    self.input_node = self.batch_size(self.input_node)
-
-
+        self.input_node = Input(shape=input_shape,name='Input_Feature')
         feat_node = self.input_node
+        if self.base_model:
+            self.input_node = self.base_model.input
+            feat_node = base_model.layers[-1].output
+
+            init_mapper = Model(input=self.input_node, output=feat_node)
+            hidden_feat_val = init_mapper.predict(X_val)
+
+        if dropout_rate > 0:
+            feat_node = Dropout(dropout_rate)(feat_node)
+
         self.output_node = None
 
         while True:
-            in_node = Input(shape=(hidden_feat.shape[1],))
+            #in_node = Input(shape=(hidden_feat_val.shape[1],))
             pred_layer = Dense(output_dim, activation='softmax')
-            pred_node = pred_layer(in_node)
+            pred_layer.name = "Output_Prediction"
+            pred_node = pred_layer(feat_node)
+
+            self.model = Model(input=self.input_node, output=pred_node)
 
             if warm_start: 
                 warm_start[0] = np.vstack((warm_start[0], np.random.uniform(-1,1,size=(self.positions_per_layer,output_dim)))) 
                 pred_layer.set_weights(warm_start)
 
-            model = Model(input=in_node, output=pred_node)
-            model.compile(optimizer='rmsprop', loss=top_loss, metrics=['accuracy'])
-            fit_history = model.fit(hidden_feat, Y_train, batch_size=batch_size, nb_epoch=outter_epoch, verbose=verbose, validation_data=(hidden_feat_test, Y_test), callbacks = [callbacks.EarlyStopping(monitor='val_loss', patience=2, verbose=1, mode='auto')])
+            self.model.compile(optimizer='rmsprop', loss=top_loss, metrics=['accuracy'])
+            fit_history = self.model.fit(X_train, Y_train, batch_size=batch_size, nb_epoch=outter_epoch, verbose=verbose, validation_data=(X_test, Y_test), callbacks = [callbacks.EarlyStopping(monitor='val_loss', patience=2, verbose=1, mode='min')])
 
             #save the warm start weights
             warm_start = pred_layer.get_weights()
 
             #Build the output node
-            output_layer = Dense(output_dim = output_dim, input_dim = input_dim, activation='softmax')
-            self.output_node = output_layer(feat_node)
-            output_layer.set_weights(pred_layer.get_weights())
-            output_layer.name = "Output_Prediction"
-            self.model=Model(input = self.input_node, output=self.output_node)
+            #output_layer = Dense(output_dim = output_dim, input_dim = input_dim, activation='softmax')
+            #self.output_node = output_layer(feat_node)
+            #output_layer.set_weights(pred_layer.get_weights())
+            #output_layer.name = "Output_Prediction"
+            #self.model=Model(input = self.input_node, output=self.output_node)
 
             if len(self.hidden_weights) >= self.nb_hidden_layers:
                 break
 
             #Get residual
-            pred = model.predict(hidden_feat_val) 
+            pred = self.model.predict(X_val) 
             residual = Y_val - pred 
 
             #Select candidate
             candidate = select_candidate(hidden_feat_val, residual, nb_epoch=hidden_epoch, nb_candidates=nb_candidates, hidden_loss=hidden_loss, nb_positions=self.positions_per_layer)
 
             #Cache hidden featuure
-            cache_in_node = Input(shape=(hidden_feat.shape[1],))
+            cache_in_node = Input(shape=hidden_feat_val.shape[1:])
             cache_hidden_layer = Dense(self.positions_per_layer, activation='tanh')
             cache_hidden_node = cache_hidden_layer(cache_in_node)
             hidden_model = Model(input=cache_in_node, output=cache_hidden_node)
 
-            hidden_pred = hidden_model.predict(hidden_feat)
-            hidden_feat = np.hstack((hidden_feat, hidden_pred))
+            #hidden_pred = hidden_model.predict(hidden_feat)
+            #hidden_feat = np.hstack((hidden_feat, hidden_pred))
 
-            hidden_pred_test = hidden_model.predict(hidden_feat_test)
-            hidden_feat_test = np.hstack((hidden_feat_test, hidden_pred_test))
+            #hidden_pred_test = hidden_model.predict(hidden_feat_test)
+            #hidden_feat_test = np.hstack((hidden_feat_test, hidden_pred_test))
 
             hidden_pred_val = hidden_model.predict(hidden_feat_val)
             hidden_feat_val = np.hstack((hidden_feat_val, hidden_pred_val))
@@ -158,11 +171,13 @@ class CascadeCorrelation(object):
             hidden_node = hidden_layer(feat_node)
             hidden_layer.set_weights(candidate['weights'])
             self.hidden_weights.append(candidate['weights'])
-            hidden_layer.trainable = False
+            hidden_layer.trainable = (not tenure)
             hidden_layer.name = "Hidden_" + str(len(self.hidden_weights))
 
             #update the feat node
             feat_node = merge([feat_node, hidden_node], mode='concat')
+            if dropout_rate > 0:
+                feat_node = Dropout(dropout_rate)(feat_node)
             #print feat_node
 
     def pred(self, x):
@@ -179,25 +194,28 @@ if __name__ == "__main__":
     
     from keras.datasets import cifar10
     from keras.datasets import mnist
-    #(X_train, y_train), (X_test, y_test) = mnist.load_data()
-    (X_train, y_train), (X_test, y_test) = cifar10.load_data()
-    X_train, X_test = map(lambda x:x.repeat(2, axis=1).repeat(2, axis=2), [X_train, X_test])
+    (X_train, y_train), (X_test, y_test) = mnist.load_data()
+    #(X_train, y_train), (X_test, y_test) = cifar10.load_data()
+    #X_train, X_test = map(lambda x:x.repeat(2, axis=1).repeat(2, axis=2), [X_train, X_test])
     X_train = X_train.astype('float32')
     X_test = X_test.astype('float32')
     X_train /= 255
     X_test /= 255
     nb_classes=10
 
-    #X_train=X_train.reshape(X_train.shape[1],-1)
-    #X_test=X_test.reshape(X_test.shape[0],-1)
+    X_train=X_train.reshape(X_train.shape[0],-1)
+    X_test=X_test.reshape(X_test.shape[0],-1)
     Y_train = np_utils.to_categorical(y_train, nb_classes)
     Y_test = np_utils.to_categorical(y_test, nb_classes)
 
     from keras.models import load_model
-    model = load_model('./revisit/vgg_1.h5')
-    feat_mapper = Model(input=model.layers[0].input, output=model.get_layer('flatten_1').output)
-    X_test = feat_mapper.predict(X_test)
-    X_train = feat_mapper.predict(X_train)
+    #model = load_model('./revisit/vgg_2.h5')
+    #base_model = Model(input=model.layers[0].input, output=model.get_layer('flatten_2').output)
+    #X_test = feat_mapper.predict(X_test)
+    #X_train = feat_mapper.predict(X_train)
     
+    #base_model.trainable = False
+    #casco = CascadeCorrelation(nb_hidden_layers = 100, positions_per_layer = 10, base_model = base_model)
     casco = CascadeCorrelation(nb_hidden_layers = 100, positions_per_layer = 10)
-    casco.fit(X_train,Y_train, validation_data=(X_test,Y_test), show_history=True, nb_candidates=20)
+    #casco.fit(X_train,Y_train, validation_data=(X_test,Y_test), show_history=True, nb_candidates=20, tenure=True, outter_epoch = 20,  hidden_epoch = 10, dropout_rate=0.5)
+    casco.fit(X_train,Y_train, validation_data=(X_test,Y_test), show_history=True, nb_candidates=20, tenure=True, outter_epoch = 20,  hidden_epoch = 10)
