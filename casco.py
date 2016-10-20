@@ -1,9 +1,11 @@
 #!/usr/bin/env python
+import os
 import numpy as np
 from sklearn.metrics import accuracy_score
 from time import gmtime, strftime
 import cPickle as pkl
 import pprint
+from time import gmtime, strftime
 
 import keras
 from keras import backend as T
@@ -92,7 +94,12 @@ class CascadeCorrelation(object):
         self.output_node = None
         self.base_layers = base_layers
 
-    def fit(self, X_train, Y_train, validation_data = None, outter_epoch = 20,  hidden_epoch = 20, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov', hidden_train_ratio = -1, tenure = True, dropout_rate = -1, use_warm_start = False):
+    def fit(self, X_train, Y_train, validation_data = None, outter_epoch = 20,  hidden_epoch = 20, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov', hidden_train_ratio = -1, tenure = True, dropout_rate = -1, use_warm_start = False, save_history = False, history_folder = "/temp/" ):
+
+        train_stamp = strftime("%Y-%m-%d-%H-%M-%S", gmtime())
+
+        if save_history and (not os.path.isfile(history_folder)): 
+            os.mkdir(history_folder)
 
         if not validation_data:
             validation_data = (X_train, Y_train)
@@ -131,6 +138,7 @@ class CascadeCorrelation(object):
 
         self.output_node = None
 
+        train_step = 0
         while True:
             #in_node = Input(shape=(hidden_feat_val.shape[1],))
             pred_layer = Dense(output_dim, activation='softmax')
@@ -145,6 +153,11 @@ class CascadeCorrelation(object):
 
             self.model.compile(optimizer='rmsprop', loss=top_loss, metrics=['accuracy'])
             fit_history = self.model.fit(X_train, Y_train, batch_size=batch_size, nb_epoch=outter_epoch, verbose=verbose, validation_data=(X_test, Y_test), callbacks = [callbacks.EarlyStopping(monitor='val_loss', patience=2, verbose=1, mode='min')])
+            train_step += 1
+
+            #save history
+            if save_history:
+                pkl.dump(fit_history, open(os.path.join(history_folder, train_stamp + str(train_step) + ".pkl", 'w')))
 
             #save the warm start weights
             warm_start = pred_layer.get_weights()
@@ -232,4 +245,4 @@ if __name__ == "__main__":
     #base_model.trainable = False
     #casco = CascadeCorrelation(nb_hidden_layers = 100, positions_per_layer = 10, base_model = base_model)
     casco = CascadeCorrelation(nb_hidden_layers = 100, positions_per_layer = 2)
-    casco.fit(X_train,Y_train, validation_data=(X_test,Y_test), show_history=True, nb_candidates=5, tenure=True, outter_epoch = 20,  hidden_epoch = 5 )
+    casco.fit(X_train,Y_train, validation_data=(X_test,Y_test), show_history=True, nb_candidates=5, tenure=True, outter_epoch = 20,  hidden_epoch = 5 , save_history = True, history_folder = "./log/" )
