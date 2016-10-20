@@ -27,21 +27,26 @@ def neg_abs_cov(y_true, y_pred):
 def neg_abs_cor(y_true, y_pred): 
     return -T.sum(T.abs(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0)/T.sqrt(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_true-T.mean(y_true,0,keepdims=True)),axis=0))/T.sqrt(T.sum((y_pred - T.mean(y_pred,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0))))
 
-def select_candidate( x, y, batch_size=128, nb_epoch=200, hidden_loss = 'cov', nb_candidates = 5, nb_positions = 1, criteria = 'best'): 
-    assert(nb_positions<=nb_candidates)
-    cand_input = Input(shape=(x.shape[1],))
+def make_candidates_model(input_shape, nb_candidates, nb_positions, node_type = 'Dense', hidden_loss = 'cov'):
+    print input_shape
+    cand_input = Input(shape=input_shape)
 
     cand_outputs = []
     cand_layers = []
 
     for out_idx in range(nb_candidates):
-        layer = Dense(1, activation='tanh')
+        if node_type is "SimpleRNN": 
+            layer = SimpleRNN(1, activation='tanh')
+        elif node_type is "GRU":
+            layer = GRU(1, activation='tanh')
+        elif node_type is "LSTM":
+            layer = LSTM(1, activation='tanh')
+        else:
+            layer = Dense(1, activation='tanh')
+
         out = layer(cand_input)
         cand_outputs.append(out)
         cand_layers.append(layer)
-
-    model = Model(input=cand_input, output=cand_outputs)
-
 
     if hidden_loss is 'cov': 
         loss_func = neg_abs_cov
@@ -50,9 +55,19 @@ def select_candidate( x, y, batch_size=128, nb_epoch=200, hidden_loss = 'cov', n
     else:
         loss_func = hidden_loss
 
-    opt = RMSprop()
+    model = Model(input=cand_input, output=cand_outputs)
+    model.compile(loss=loss_func, optimizer='adam')
 
-    model.compile(loss=loss_func, optimizer=opt)
+    return model, cand_layers
+
+
+
+def select_candidate( x, y, batch_size=128, nb_epoch=200, hidden_loss = 'cov', nb_candidates = 5, nb_positions = 1, criteria = 'best', node_type='Dense'): 
+    assert(nb_positions<=nb_candidates and nb_positions > 0)
+    input_shape = tuple(x.shape[1:])
+
+
+    model, cand_layers = make_candidates_model(input_shape, nb_candidates, nb_positions, node_type=node_type, hidden_loss = hidden_loss)
     fit_record = model.fit(x, [y]*nb_candidates,validation_data=(x, [y]*nb_candidates), batch_size=batch_size, nb_epoch=nb_epoch, verbose=1 ,callbacks = [callbacks.EarlyStopping(monitor='val_loss', patience=2, verbose=1, mode='min')])
     losses = model.evaluate(x,[y]*nb_candidates, verbose=0)
 
@@ -67,7 +82,7 @@ def select_candidate( x, y, batch_size=128, nb_epoch=200, hidden_loss = 'cov', n
     #rec[idx] = {'model':model, 'loss':loss}
 
 class CascadeCorrelation(object):
-    def __init__(self, nb_hidden_layers = 10, positions_per_layer = 1, base_model=None):
+    def __init__(self, nb_hidden_layers = 10, positions_per_layer = 1, base_layers=None):
         self.nb_hidden_layers = nb_hidden_layers
         self.positions_per_layer=positions_per_layer
         self.model = None
@@ -75,9 +90,9 @@ class CascadeCorrelation(object):
         self.hidden_weights = []
         self.input_node = None
         self.output_node = None
-        self.base_model = base_model
+        self.base_layers = base_layers
 
-    def fit(self, X_train, Y_train, validation_data = None, outter_epoch = 20,  hidden_epoch = 20, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov', hidden_train_ratio = -1, tenure = True, dropout_rate = -1):
+    def fit(self, X_train, Y_train, validation_data = None, outter_epoch = 20,  hidden_epoch = 20, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov', hidden_train_ratio = -1, tenure = True, dropout_rate = -1, use_warm_start = False):
 
         if not validation_data:
             validation_data = (X_train, Y_train)
@@ -104,9 +119,9 @@ class CascadeCorrelation(object):
         warm_start = None
         self.input_node = Input(shape=input_shape,name='Input_Feature')
         feat_node = self.input_node
-        if self.base_model:
-            self.input_node = self.base_model.input
-            feat_node = base_model.layers[-1].output
+        if self.base_layers:
+            self.input_node = self.base_layers[0].input
+            feat_node = base_layers[-1].output
 
             init_mapper = Model(input=self.input_node, output=feat_node)
             hidden_feat_val = init_mapper.predict(X_val)
@@ -124,7 +139,7 @@ class CascadeCorrelation(object):
 
             self.model = Model(input=self.input_node, output=pred_node)
 
-            if warm_start: 
+            if use_warm_start and warm_start: 
                 warm_start[0] = np.vstack((warm_start[0], np.random.uniform(-1,1,size=(self.positions_per_layer,output_dim)))) 
                 pred_layer.set_weights(warm_start)
 
@@ -216,6 +231,5 @@ if __name__ == "__main__":
     
     #base_model.trainable = False
     #casco = CascadeCorrelation(nb_hidden_layers = 100, positions_per_layer = 10, base_model = base_model)
-    casco = CascadeCorrelation(nb_hidden_layers = 100, positions_per_layer = 10)
-    #casco.fit(X_train,Y_train, validation_data=(X_test,Y_test), show_history=True, nb_candidates=20, tenure=True, outter_epoch = 20,  hidden_epoch = 10, dropout_rate=0.5)
-    casco.fit(X_train,Y_train, validation_data=(X_test,Y_test), show_history=True, nb_candidates=20, tenure=True, outter_epoch = 20,  hidden_epoch = 10)
+    casco = CascadeCorrelation(nb_hidden_layers = 100, positions_per_layer = 2)
+    casco.fit(X_train,Y_train, validation_data=(X_test,Y_test), show_history=True, nb_candidates=5, tenure=True, outter_epoch = 20,  hidden_epoch = 5 )
