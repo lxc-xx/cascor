@@ -15,13 +15,13 @@ from keras.layers.core import Dense, Dropout, Activation
 from keras.optimizers import SGD, Adam, RMSprop
 from keras.utils import np_utils
 from keras.layers import Input, merge
+from keras.layers import LSTM, SimpleRNN, GRU, Embedding
+from keras.models import load_model
+from keras.preprocessing import sequence
+
 import dataset
 
 from sklearn.cross_validation import train_test_split
-
-#from multiprocessing import Process, Value, Array, Manager
-#from multiprocessing import Process, Lock
-#from multiprocessing.sharedctypes import Value, Array
 
 def neg_abs_cov(y_true, y_pred): 
     return -T.sum(T.abs(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0)))
@@ -29,22 +29,15 @@ def neg_abs_cov(y_true, y_pred):
 def neg_abs_cor(y_true, y_pred): 
     return -T.sum(T.abs(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0)/T.sqrt(T.sum((y_true - T.mean(y_true,0, keepdims=True))*(y_true-T.mean(y_true,0,keepdims=True)),axis=0))/T.sqrt(T.sum((y_pred - T.mean(y_pred,0, keepdims=True))*(y_pred-T.mean(y_pred,0,keepdims=True)),axis=0))))
 
-def make_candidates_model(input_shape, nb_candidates, nb_positions, node_type = 'Dense', hidden_loss = 'cov'):
-    print input_shape
+def make_candidates_model(input_shape, nb_candidates, nb_positions, node_type = Dense, hidden_loss = 'cov'):
+    #print input_shape
     cand_input = Input(shape=input_shape)
 
     cand_outputs = []
     cand_layers = []
 
     for out_idx in range(nb_candidates):
-        if node_type is "SimpleRNN": 
-            layer = SimpleRNN(1, activation='tanh')
-        elif node_type is "GRU":
-            layer = GRU(1, activation='tanh')
-        elif node_type is "LSTM":
-            layer = LSTM(1, activation='tanh')
-        else:
-            layer = Dense(1, activation='tanh')
+        layer = node_type(1,activation='tanh')
 
         out = layer(cand_input)
         cand_outputs.append(out)
@@ -64,7 +57,7 @@ def make_candidates_model(input_shape, nb_candidates, nb_positions, node_type = 
 
 
 
-def select_candidate( x, y, batch_size=128, nb_epoch=200, hidden_loss = 'cov', nb_candidates = 5, nb_positions = 1, criteria = 'best', node_type='Dense'): 
+def select_candidate( x, y, batch_size=128, nb_epoch=200, hidden_loss = 'cov', nb_candidates = 5, nb_positions = 1, criteria = 'best', node_type=Dense): 
     assert(nb_positions<=nb_candidates and nb_positions > 0)
     input_shape = tuple(x.shape[1:])
 
@@ -84,29 +77,30 @@ def select_candidate( x, y, batch_size=128, nb_epoch=200, hidden_loss = 'cov', n
     #rec[idx] = {'model':model, 'loss':loss}
 
 class CascadeCorrelation(object):
-    def __init__(self, nb_hidden_layers = 10, positions_per_layer = 1, base_layers=None):
+    def __init__(self, nb_hidden_layers = 10, positions_per_layer = 1, base_layers=None, is_recur = False):
         self.nb_hidden_layers = nb_hidden_layers
         self.positions_per_layer=positions_per_layer
         self.model = None
-        self.history = {}
+        self.history = []
         self.hidden_weights = []
         self.input_node = None
         self.output_node = None
         self.base_layers = base_layers
+        self.is_recur = is_recur
 
-    def fit(self, X_train, Y_train, validation_data = None, outter_epoch = 20,  hidden_epoch = 20, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov', hidden_train_ratio = -1, tenure = True, dropout_rate = -1, use_warm_start = False, save_history = False, history_folder = "/temp/" ):
+    def fit(self, X_train, Y_train, validation_data = None, outter_epoch = 20,  hidden_epoch = 20, batch_size = 128, nb_candidates = 5, verbose=1, show_history=False, top_loss = 'categorical_crossentropy', hidden_loss = 'cov', hidden_train_ratio = -1, tenure = True, dropout_rate = -1, use_warm_start = False, save_history = False, history_folder = "/temp/", node_type=Dense):
 
+        #Creat history save folder
         train_stamp = strftime("%Y-%m-%d-%H-%M-%S", gmtime())
-
-        if save_history and (not os.path.isfile(history_folder)): 
+        if save_history and (not os.path.isdir(history_folder)): 
             os.mkdir(history_folder)
 
         if not validation_data:
             validation_data = (X_train, Y_train)
 
-        self.history = {}
+        self.history = []
         self.hidden_weights = []
-        input_shape = X_train.shape[1:]
+        input_shape = tuple(X_train.shape[1:])
         output_dim = Y_train.shape[1] 
 
         X_test, Y_test = validation_data
@@ -133,15 +127,17 @@ class CascadeCorrelation(object):
             init_mapper = Model(input=self.input_node, output=feat_node)
             hidden_feat_val = init_mapper.predict(X_val)
 
-        if dropout_rate > 0:
-            feat_node = Dropout(dropout_rate)(feat_node)
+        #if dropout_rate > 0:
+        #    feat_node = Dropout(dropout_rate)(feat_node)
 
         self.output_node = None
 
         train_step = 0
         while True:
             #in_node = Input(shape=(hidden_feat_val.shape[1],))
-            pred_layer = Dense(output_dim, activation='softmax')
+            pred_layer = node_type(output_dim, activation='softmax')
+
+            #pred_layer = Dense(output_dim, activation='softmax')
             pred_layer.name = "Output_Prediction"
             pred_node = pred_layer(feat_node)
 
@@ -151,13 +147,15 @@ class CascadeCorrelation(object):
                 warm_start[0] = np.vstack((warm_start[0], np.random.uniform(-1,1,size=(self.positions_per_layer,output_dim)))) 
                 pred_layer.set_weights(warm_start)
 
-            self.model.compile(optimizer='rmsprop', loss=top_loss, metrics=['accuracy'])
-            fit_history = self.model.fit(X_train, Y_train, batch_size=batch_size, nb_epoch=outter_epoch, verbose=verbose, validation_data=(X_test, Y_test), callbacks = [callbacks.EarlyStopping(monitor='val_loss', patience=2, verbose=1, mode='min')])
+            self.model.compile(optimizer='adam', loss=top_loss, metrics=['accuracy'])
+            #fit_history = self.model.fit(X_train, Y_train, batch_size=batch_size, nb_epoch=outter_epoch, verbose=verbose, validation_data=(X_test, Y_test), callbacks = [callbacks.EarlyStopping(monitor='val_loss', patience=2, verbose=1, mode='min')])
             train_step += 1
 
             #save history
-            if save_history:
-                pkl.dump(fit_history, open(os.path.join(history_folder, train_stamp + str(train_step) + ".pkl", 'w')))
+            #self.history.append(fit_history.history)
+            #if save_history:
+            #    pkl.dump(fit_history.history, open(os.path.join(history_folder, train_stamp + "_" +str(train_step) + ".pkl"), 'w'))
+
 
             #save the warm start weights
             warm_start = pred_layer.get_weights()
@@ -181,7 +179,7 @@ class CascadeCorrelation(object):
 
             #Cache hidden featuure
             cache_in_node = Input(shape=hidden_feat_val.shape[1:])
-            cache_hidden_layer = Dense(self.positions_per_layer, activation='tanh')
+            cache_hidden_layer = node_type(self.positions_per_layer, activation='tanh', return_sequences=True)
             cache_hidden_node = cache_hidden_layer(cache_in_node)
             hidden_model = Model(input=cache_in_node, output=cache_hidden_node)
 
@@ -222,21 +220,21 @@ if __name__ == "__main__":
     
     from keras.datasets import cifar10
     from keras.datasets import mnist
-    (X_train, y_train), (X_test, y_test) = mnist.load_data()
+    from keras.datasets import imdb
+    #(X_train, y_train), (X_test, y_test) = mnist.load_data()
     #(X_train, y_train), (X_test, y_test) = cifar10.load_data()
     #X_train, X_test = map(lambda x:x.repeat(2, axis=1).repeat(2, axis=2), [X_train, X_test])
-    X_train = X_train.astype('float32')
-    X_test = X_test.astype('float32')
-    X_train /= 255
-    X_test /= 255
-    nb_classes=10
+    #X_train = X_train.astype('float32')
+    #X_test = X_test.astype('float32')
+    #X_train /= 255
+    #X_test /= 255
+    #nb_classes=10
 
-    X_train=X_train.reshape(X_train.shape[0],-1)
-    X_test=X_test.reshape(X_test.shape[0],-1)
-    Y_train = np_utils.to_categorical(y_train, nb_classes)
-    Y_test = np_utils.to_categorical(y_test, nb_classes)
+    #X_train=X_train.reshape(X_train.shape[0],-1)
+    #X_test=X_test.reshape(X_test.shape[0],-1)
+    #Y_train = np_utils.to_categorical(y_train, nb_classes)
+    #Y_test = np_utils.to_categorical(y_test, nb_classes)
 
-    from keras.models import load_model
     #model = load_model('./revisit/vgg_2.h5')
     #base_model = Model(input=model.layers[0].input, output=model.get_layer('flatten_2').output)
     #X_test = feat_mapper.predict(X_test)
@@ -244,5 +242,27 @@ if __name__ == "__main__":
     
     #base_model.trainable = False
     #casco = CascadeCorrelation(nb_hidden_layers = 100, positions_per_layer = 10, base_model = base_model)
-    casco = CascadeCorrelation(nb_hidden_layers = 100, positions_per_layer = 2)
-    casco.fit(X_train,Y_train, validation_data=(X_test,Y_test), show_history=True, nb_candidates=5, tenure=True, outter_epoch = 20,  hidden_epoch = 5 , save_history = True, history_folder = "./log/" )
+    max_features = 20000
+    maxlen = 80  # cut texts after this number of words (among top max_features most common words)
+    batch_size = 32
+    nb_classes = 2
+
+    print('Loading data...')
+    (X_train, Y_train), (X_test, Y_test) = imdb.load_data(nb_words=max_features)
+    print(len(X_train), 'train sequences')
+    print(len(X_test), 'test sequences')
+
+    print('Pad sequences (samples x time)')
+    X_train = sequence.pad_sequences(X_train, maxlen=maxlen)
+    X_test = sequence.pad_sequences(X_test, maxlen=maxlen)
+
+    Y_train = np_utils.to_categorical(Y_train, nb_classes)
+    Y_test = np_utils.to_categorical(Y_test, nb_classes)
+    print('X_train shape:', X_train.shape)
+    print('X_test shape:', X_test.shape)
+    model = Sequential()
+    model.add(Embedding(max_features, 128, dropout=0.2))
+    base_layers = model.layers
+
+    casco = CascadeCorrelation(nb_hidden_layers = 100, positions_per_layer = 2, base_layers = base_layers, is_recur = True)
+    casco.fit(X_train,Y_train, validation_data=(X_test,Y_test), show_history=True, nb_candidates=5, tenure=True, outter_epoch = 1,  hidden_epoch = 1 , save_history = True, history_folder = "./log/" , node_type=LSTM)
